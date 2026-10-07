@@ -1,0 +1,50 @@
+{
+    "page": 1,
+    "results": [
+        {
+            "adult": false,
+            "backdrop_path": "/rBOnrVlck7BIlGeWVlzYiZeg4l2.jpg",
+            "id": 209867,
+            "name": "Frieren: Beyond Journey's End",
+            "original_name": "\u846c\u9001\u306e\u30d5\u30ea\u30fc\u30ec\u30f3",
+            "overview": "After the party of heroes defeated the Demon King, they restored peace to the land and returned to lives of solitude. Generations pass, and the elven mage Frieren comes face to face with humanity's mortality. She takes on a new apprentice and promises to fulfill old friends' dying wishes. Can an elven mind make peace with the nature of life and death? Frieren embarks on her quest to find out.",
+            "poster_path": "/dqZENchTd7lp5zht7BdlqM7RBhD.jpg",
+            "media_type": "tv",
+            "original_language": "ja",
+            "genre_ids": [
+                16,
+                10759,
+                18,
+                10765
+            ],
+            "popularity": 92.5258,
+            "first_air_date": "2023-09-29",
+            "softcore": false,
+            "vote_average": 8.816,
+            "vote_count": 984,
+            "origin_country": [
+                "JP"
+            ]
+        },
+        {
+            "adult": false,
+            "backdrop_path": null,
+            "id": 360097,
+            "title": "Young Ones Are Even Cold in the Summer",
+            "original_title": "Kleine frieren auch im Sommer",
+            "overview": "A girl returns from a trip out of the country and is given a strip-search for drugs when she re-enters Switzerland. Lacking a place to stay, she looks up an old friend of hers and stays with him, working to pay for food for both of them. In the casual manner of such arrangements, several more people enter the scene to stay: a rich kid who has been disinherited and a girl who is an escaped convict. The working girl has been hiding some of her wages in her clothes, and the two young men steal the money, buy a car, and hare off looking for excitement.",
+            "poster_path": null,
+            "media_type": "movie",
+            "original_language": "de",
+            "genre_ids": [],
+            "popularity": 0.8712,
+            "release_date": "1978-01-01",
+            "softcore": false,
+            "video": false,
+            "vote_average": 7.0,
+            "vote_count": 1
+        }
+    ],
+    "total_pages": 1,
+    "total_results": 2
+}

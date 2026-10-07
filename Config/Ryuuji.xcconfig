@@ -1,0 +1,3 @@
+// Shared build settings for the Ryuuji app target.
+// Secrets.xcconfig is git-ignored; copy Secrets.example.xcconfig to create it.
+#include? "Secrets.xcconfig"
