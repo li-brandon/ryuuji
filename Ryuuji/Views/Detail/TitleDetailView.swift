@@ -48,6 +48,7 @@ private struct TitleDetailContent: View {
             .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .background(.background)
         .navigationTitle(title.name)
         .toolbar {
             if title.kind == .show {
