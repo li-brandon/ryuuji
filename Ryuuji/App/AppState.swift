@@ -39,6 +39,9 @@ final class AppState {
     var isQuickAddPresented = false
     /// Text to pre-fill the next time quick add opens (debug launch flag only).
     var quickAddSeedQuery: String?
+    /// The main window's undo manager, so logs from the menu bar extra undo with ⌘Z in the
+    /// main window. Nil while the main window is closed.
+    @ObservationIgnored weak var mainUndoManager: UndoManager?
 
     func open(_ title: Title) {
         path = [TitleRoute(key: TitleKey(title))]

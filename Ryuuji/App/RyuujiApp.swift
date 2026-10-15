@@ -49,16 +49,14 @@ struct RyuujiApp: App {
         Settings {
             AboutView()
         }
-        
-        if showMenuBarExtra {
-            MenuBarExtra("Ryuuji", systemImage: "play.square.stack") {
-                MenuBarExtraContent()
-                    .environment(services)
-                    .environment(services.watchLog)
-            }
-            .menuBarExtraStyle(.window)
-            .modelContainer(services.container)
+
+        MenuBarExtra("Ryuuji", systemImage: "play.square.stack", isInserted: $showMenuBarExtra) {
+            MenuBarExtraContent()
+                .environment(appState)
+                .environment(services.watchLog)
         }
+        .menuBarExtraStyle(.window)
+        .modelContainer(services.container)
     }
 }
 

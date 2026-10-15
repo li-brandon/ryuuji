@@ -1,33 +1,17 @@
 import SwiftData
 import SwiftUI
 
+/// Menu bar extra: the Up Next list with one-click logging and a way back to the main window.
 struct MenuBarExtraContent: View {
-    @Query(filter: #Predicate<Title> { $0.statusRaw == "watching" && $0.kindRaw == "show" })
+    @Query(filter: UpNextEntry.candidates)
     private var watching: [Title]
-    
-    @Environment(AppServices.self) private var services
-    @Environment(WatchLogService.self) private var watchLog
-    @Environment(\.undoManager) private var undoManager
+
     @Environment(\.openWindow) private var openWindow
-    
-    private struct Entry: Identifiable {
-        let title: Title
-        let next: EpisodeInfo
-        var id: PersistentIdentifier { title.persistentModelID }
-    }
-    
-    private var entries: [Entry] {
-        let today = AirDate.today()
-        return watching
-            .compactMap { title -> Entry? in
-                let progress = title.progress(today: today)
-                guard let next = progress.next else { return nil }
-                return Entry(title: title, next: next)
-            }
-            .sorted { $0.title.lastActivity > $1.title.lastActivity }
-    }
-    
+
+    private var entries: [UpNextEntry] { UpNextEntry.entries(from: watching) }
+
     var body: some View {
+        let entries = entries
         VStack(spacing: 0) {
             if entries.isEmpty {
                 emptyState
@@ -39,12 +23,12 @@ struct MenuBarExtraContent: View {
                     }
                 }
             }
-            
+
             Divider()
-            
+
             Button("Open Ryuuji") {
                 openWindow(id: "main")
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()
             }
             .buttonStyle(.plain)
             .padding(.vertical, 8)
@@ -53,7 +37,7 @@ struct MenuBarExtraContent: View {
         }
         .frame(width: 320)
     }
-    
+
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "play.square.stack")
@@ -72,15 +56,15 @@ struct MenuBarExtraContent: View {
 }
 
 private struct MenuBarRow: View {
-    let entry: MenuBarExtraContent.Entry
-    
+    let entry: UpNextEntry
+
+    @Environment(AppState.self) private var appState
     @Environment(WatchLogService.self) private var watchLog
-    @Environment(\.undoManager) private var undoManager
-    
+
     var body: some View {
         HStack(spacing: 10) {
             PosterView(path: entry.title.posterPath, width: 32)
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.title.name)
                     .font(.caption.weight(.medium))
@@ -89,12 +73,13 @@ private struct MenuBarRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            
+
             Spacer()
-            
+
             Button {
                 withAnimation {
-                    watchLog.log(entry.next, of: entry.title, undoManager: undoManager)
+                    // Register on the main window's undo stack so ⌘Z there reverts it.
+                    watchLog.log(entry.next, of: entry.title, undoManager: appState.mainUndoManager)
                 }
             } label: {
                 Image(systemName: "plus.circle.fill")
