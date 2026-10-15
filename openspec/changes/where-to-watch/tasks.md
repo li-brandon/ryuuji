@@ -1,79 +1,96 @@
 # Tasks
 
+## 0. Resolve open question
+
+- [ ] OQ1 (Brandon): empty My services shows no badges or all flatrate providers? Update spec, design D4, and tasks 7–9/12 with the answer
+
 ## 1. Extend SwiftData model for provider data
 
-- [ ] Add `providerDataJSON: Data` property to `Title` model
-- [ ] Add helper method `var watchProviders: WatchProviderData?` to decode cached JSON
-- [ ] Verify: Migration-free (optional property)
+- [ ] Add `SchemaV2` (copy of V1) with `Title.providerDataJSON: Data = Data()` (non-optional, default empty)
+- [ ] Add `SchemaV2` to `RyuujiMigrationPlan.schemas` and a `.lightweight(fromVersion: SchemaV1.self, toVersion: SchemaV2.self)` stage
+- [ ] Point `Title` / `WatchEvent` typealiases and `RyuujiStore.makeContainer` at `SchemaV2`
+- [ ] Add `Title.watchProviders: WatchProviderData?` (nil when empty/unreadable) and `setWatchProviders(_:)` in `Title+Domain.swift`
+- [ ] Verify: a V1 store opens and migrates with `providerDataJSON` empty (ModelTests)
 
 ## 2. Define provider data types
 
-- [ ] Create `WatchProviderData` struct (region, providers, link)
-- [ ] Create `ProviderInfo` struct (id, name, logoPath, displayPriority)
-- [ ] Make both `Codable` for JSON storage
-- [ ] Add decoding tests
+- [ ] Create `WatchProviderData` (region, fetchedAt, providers, link) and `ProviderInfo` (id, name, logoPath, displayPriority); `Codable`, `Sendable`, `Equatable`
+- [ ] Add raw `TMDBWatchProvidersResponse` and `TMDBProviderListResponse` to `TMDBModels.swift`
+- [ ] Add pure `WatchProviderMapper` converting raw responses (flatrate only, sorted by display priority; empty providers when region missing)
+- [ ] Add round-trip encode/decode tests
 
-## 3. Extend TMDB client for watch providers
+## 3. Extend TMDB client
 
-- [ ] Add `watchProviders(for:region:)` method to `TMDBClient` protocol
-- [ ] Implement in `URLSessionTMDBClient`
-- [ ] Parse TMDB response and extract flatrate providers only
-- [ ] Add decoding test with recorded fixture
-- [ ] Verify: Error handling for missing region data
+- [ ] Add `watchProviders(for:region:)` and `providerCatalog(region:)` to `TMDBClient`
+- [ ] Implement both in `LiveTMDBClient` using `get`
+- [ ] `providerCatalog` fetches `/watch/providers/movie` and `/watch/providers/tv` with `watch_region`, merges by provider ID
+- [ ] Implement both in `FakeTMDBClient` (with `failing` and `requestCount` support)
+- [ ] Record fixtures: `tv-120089-watch-providers.json`, `movie-372058-watch-providers.json`, `watch-providers-movie-US.json`, `watch-providers-tv-US.json`
+- [ ] Decoding tests against fixtures, including a region with no entry
 
-## 4. Integrate provider fetching into metadata refresh
+## 4. Fetch provider data in the refresher (not in TitleMapper)
 
-- [ ] Fetch provider data in `TitleMapper.apply()`
-- [ ] Store as JSON on `Title.providerDataJSON`
-- [ ] Use current region setting from UserDefaults
-- [ ] Verify: Refresher updates provider data on schedule
+- [ ] Leave `TitleMapper.apply(_:to:)` unchanged and network-free
+- [ ] Add `MetadataRefresher.isProviderDue(_:region:now:)` (missing, unreadable, other region, or ≥ 24 h old)
+- [ ] `refreshDue` also fetches providers for all provider-due titles (movies and shows) with the same concurrency cap
+- [ ] Add `refreshProviders(_:client:region:now:)` for region change and detail Refresh
+- [ ] Apply via `title.setWatchProviders(_:)`; on failure keep cache and don't count metadata as failed
+- [ ] `RefreshScheduler` reads `providerRegion` from its `defaults` and passes it through
+- [ ] Detail Refresh also refreshes that title's providers
+- [ ] Tests in `MetadataRefresherTests`: movie gets providers, ended show gets providers, failure keeps cache, region mismatch is due
 
-## 5. Add user settings for My services and region
+## 5. Settings: region and My services
 
-- [ ] Add `@AppStorage("myServices")` array in settings view
-- [ ] Add `@AppStorage("providerRegion")` string in settings view
-- [ ] Default region to "US"
-- [ ] Default My services to empty array
-- [ ] Create multi-select picker for common services (Netflix, Hulu, etc.)
-- [ ] Create single-select picker for common regions
-- [ ] Verify: Settings persist across launches
+- [ ] Add `WhereToWatchSettingsView`; make the `Settings` scene a `TabView` with "Where to Watch" and "About"
+- [ ] `@AppStorage("providerRegion")` default "US"; region picker with US, CA, GB, JP, AU, DE, FR, IT, ES, BR, MX
+- [ ] `@AppStorage("myServices")` JSON `[Int]`, default empty
+- [ ] Load options from `providerCatalog(region:)`; cache per region in UserDefaults (`providerCatalog.{region}`); show cached list offline
+- [ ] Error + Retry when no list is available; keep existing selections
+- [ ] "Service list powered by JustWatch" caption
+- [ ] Verify: settings persist across launches
 
-## 6. Create provider badge component
+## 6. Region change handling
 
-- [ ] Create `ProviderBadgeView` with logo from TMDB image path
-- [ ] Support small (20x20) and medium (32x32) sizes
-- [ ] Fall back to provider name text if logo unavailable
-- [ ] Use TMDB logo size w45 for badges
-- [ ] Verify: Logos load and display correctly
+- [ ] On region change, trigger `refreshProviders` for all titles immediately
+- [ ] Badge views hide data whose region differs from the current region (see task 7)
+- [ ] Verify: switching US → GB hides US badges at once and shows GB badges after refetch; switching back offline restores cached US badges
 
-## 7. Add provider badges to Library rows
+## 7. Provider badge components
 
-- [ ] Read My services setting
-- [ ] Filter providers to My services (or show all if empty)
-- [ ] Display up to 5 badges after score
-- [ ] Show "+N more" text if more than 5
-- [ ] Verify: Badges appear correctly sized and positioned
+- [ ] `ProviderBadgeView`: logo via `TMDBImage.url(_:size:)` with new `Size.logo = "w92"`; small (20×20) and medium (32×32); name-text fallback
+- [ ] `ProviderBadgeRow`: region check, My services filter (empty case per OQ1), max 5 + "+N more", renders nothing when nothing matches
+- [ ] `JustWatchAttribution` view (link, footer, About variants)
+- [ ] Unit-test the filtering/limiting logic as a pure function
 
-## 8. Add provider badges to title detail
+## 8. Library and Up Next rows
 
-- [ ] Add provider badges section below overview in detail header
-- [ ] Use medium size badges
-- [ ] Filter and limit same as Library
-- [ ] Verify: Badges appear correctly in detail view
+- [ ] Add small `ProviderBadgeRow` to `LibraryRow` after the score
+- [ ] Add small `ProviderBadgeRow` to `UpNextRow` before the log button
+- [ ] Add JustWatch footer to Library and Up Next lists when any visible row shows badges
+- [ ] Verify: badges sized/positioned correctly and rows don't truncate titles at default window width
 
-## 9. Add JustWatch attribution
+## 9. Title detail
 
-- [ ] Add "Powered by JustWatch" text with link to About/Settings window
-- [ ] Place below TMDB attribution
-- [ ] Link to https://www.justwatch.com
-- [ ] Verify: Attribution visible and link works
+- [ ] Add medium `ProviderBadgeRow` below the overview in the header
+- [ ] Add "Powered by JustWatch" link under badges (title's `link`, fallback justwatch.com) whenever badges show
+- [ ] Verify: badges and attribution appear correctly
 
-## 10. Testing and verification
+## 10. About attribution
 
-- [ ] Test with various service combinations
-- [ ] Test with empty My services (show all)
-- [ ] Test with no provider data cached
-- [ ] Test with more than 5 providers
-- [ ] Test region change and refresh
-- [ ] Test offline with cached data
-- [ ] Verify TMDB attribution requirements met
+- [ ] Add "Powered by JustWatch" with link to https://www.justwatch.com in `AboutView`, below TMDB attribution
+- [ ] Verify: visible in both the About window and the Settings About tab; link opens
+
+## 11. Live verification
+
+- [ ] Run against live TMDB: badges, My services list, region switch, attribution in every location
+- [ ] Run offline with cached data
+
+## 12. Testing checklist
+
+- [ ] Various My services combinations, including none matching
+- [ ] Empty My services (expected result per OQ1)
+- [ ] No provider data cached
+- [ ] More than 5 matching providers
+- [ ] Region change online and offline
+- [ ] Movies and ended shows receive provider data
+- [ ] JustWatch attribution present wherever provider data appears and in About
