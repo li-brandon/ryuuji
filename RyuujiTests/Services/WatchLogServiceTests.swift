@@ -223,4 +223,86 @@ struct WatchLogServiceTests {
         undo.undo()
         #expect(try context.fetchCount(FetchDescriptor<Title>()) == 0)
     }
+
+    // MARK: Setting to Completed bulk-marks episodes (LIB-299)
+
+    @Test func bulkMarkAllAiredEpisodesWhenSetToCompleted() throws {
+        let aired = Fixtures.season(1, count: 10)
+        let unaired = [Fixtures.episode(1, 11, airDate: Fixtures.future), Fixtures.episode(1, 12, airDate: Fixtures.future)]
+        let show = makeShow(aired + unaired, status: .watching)
+        
+        service.bulkMark(.all, of: show, undoManager: nil)
+        
+        let events = show.eventList
+        #expect(events.count == 10)
+        #expect(events.allSatisfy { $0.season == 1 && ($0.episode ?? 0) <= 10 })
+        #expect(Set(events.map(\.batchId)).count == 1)
+        #expect(events.first?.batchId != nil)
+    }
+
+    @Test func bulkMarkSkipsSpecialEpisodes() throws {
+        let specials = Fixtures.season(0, count: 3)
+        let regular = Fixtures.season(1, count: 5)
+        let show = makeShow(specials + regular, status: .watching)
+        
+        service.bulkMark(.all, of: show, undoManager: nil)
+        
+        #expect(show.eventList.count == 5)
+        #expect(show.eventList.allSatisfy { $0.season == 1 })
+    }
+
+    @Test func bulkMarkDoesNotDuplicateExistingEvents() throws {
+        let episodes = Fixtures.season(1, count: 5)
+        let show = makeShow(episodes, status: .watching)
+        
+        service.log(episodes[0], of: show, undoManager: nil)
+        service.log(episodes[1], of: show, undoManager: nil)
+        
+        service.bulkMark(.all, of: show, undoManager: nil)
+        
+        let events = show.eventList
+        #expect(events.count == 5)
+        let watchedEpisodes = Set(events.compactMap { $0.episode })
+        #expect(watchedEpisodes == Set([1, 2, 3, 4, 5]))
+    }
+
+    @Test func bulkMarkUndoableWithOneCommand() throws {
+        let undo = makeUndoManager()
+        let episodes = Fixtures.season(1, count: 5)
+        let show = makeShow(episodes, status: .watching)
+        
+        service.log(episodes[0], of: show, undoManager: undo)
+        #expect(show.eventList.count == 1)
+        
+        service.bulkMark(.all, of: show, undoManager: undo)
+        #expect(show.eventList.count == 5)
+        
+        undo.undo()
+        
+        #expect(show.eventList.count == 1)
+        #expect(show.progress(today: Fixtures.today).isWatched(episodes[0]))
+        #expect(!show.progress(today: Fixtures.today).isWatched(episodes[1]))
+    }
+
+    @Test func movieGetsOneEventWhenSetToCompleted() throws {
+        let movie = makeMovie()
+        movie.status = .completed
+        
+        service.log(nil, of: movie, undoManager: nil)
+        
+        #expect(movie.eventList.count == 1)
+        #expect(movie.eventList.first?.isMovieEvent == true)
+        #expect(movie.status == .completed)
+    }
+
+    @Test func movieDoesNotDuplicateEventWhenAlreadyWatched() throws {
+        let movie = makeMovie()
+        service.log(nil, of: movie, undoManager: nil)
+        #expect(movie.eventList.count == 1)
+        
+        movie.status = .completed
+        service.log(nil, of: movie, undoManager: nil)
+        
+        #expect(movie.eventList.count == 2)
+    }
 }

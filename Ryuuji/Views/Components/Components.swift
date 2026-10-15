@@ -84,11 +84,21 @@ extension Title {
 /// The status picker used in the detail view and context menus.
 struct StatusPicker: View {
     @Bindable var title: Title
+    @Environment(WatchLogService.self) private var watchLog
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         Picker("Status", selection: $title.status) {
             ForEach(ListStatus.allCases) { status in
                 Label(status.label, systemImage: status.systemImage).tag(status)
+            }
+        }
+        .onChange(of: title.status) { oldValue, newValue in
+            guard newValue == .completed, oldValue != .completed else { return }
+            if title.kind == .show {
+                watchLog.bulkMark(.all, of: title, undoManager: undoManager)
+            } else if title.kind == .movie && title.progress(today: AirDate.today()).eventCount == 0 {
+                watchLog.log(nil, of: title, undoManager: undoManager)
             }
         }
     }
