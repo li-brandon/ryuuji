@@ -61,49 +61,58 @@ struct LibraryView: View {
 
     var body: some View {
         let today = AirDate.today()
-        VStack(spacing: 0) {
-            statusBar
-            Divider()
-            if visible.isEmpty {
+        if visible.isEmpty {
+            VStack(spacing: 0) {
+                statusBar
+                Divider()
                 ContentUnavailableView {
                     Label(titles.isEmpty ? "Your Library Is Empty" : "No Matching Titles", systemImage: "books.vertical")
                 } description: {
                     Text(titles.isEmpty ? "Press ⌘K to search TMDB and add titles." : "Try a different status or kind filter.")
                 }
-            } else {
-                List(visible) { title in
-                    NavigationLink(value: TitleRoute(key: TitleKey(title))) {
-                        LibraryRow(title: title, today: today)
+            }
+            .navigationTitle("Library")
+            .toolbar { kindAndSortPickers }
+            .confirmationDialog(
+                "Remove "\(pendingRemoval?.name ?? "")"?",
+                isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+                presenting: pendingRemoval
+            ) { title in
+                Button("Remove", role: .destructive) { remove(title) }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("This also deletes its watch history. It can't be undone.")
+            }
+        } else {
+            List {
+                Section {
+                    ForEach(visible) { title in
+                        NavigationLink(value: TitleRoute(key: TitleKey(title))) {
+                            LibraryRow(title: title, today: today)
+                        }
+                        .contextMenu { contextMenu(for: title) }
                     }
-                    .contextMenu { contextMenu(for: title) }
+                } header: {
+                    VStack(spacing: 0) {
+                        statusBar
+                        Divider()
+                    }
+                    .textCase(nil)
                 }
             }
-        }
-        .navigationTitle("Library")
-        .toolbar {
-            ToolbarItem {
-                Picker("Kind", selection: $kindFilter) {
-                    ForEach(KindFilter.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
+            .listStyle(.plain)
+            .navigationTitle("Library")
+            .toolbar { kindAndSortPickers }
+            .confirmationDialog(
+                "Remove "\(pendingRemoval?.name ?? "")"?",
+                isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+                presenting: pendingRemoval
+            ) { title in
+                Button("Remove", role: .destructive) { remove(title) }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("This also deletes its watch history. It can't be undone.")
             }
-            ToolbarItem {
-                Picker("Sort", selection: $sort) {
-                    ForEach(LibrarySort.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.menu)
-                .help("Sort titles")
-            }
-        }
-        .confirmationDialog(
-            "Remove “\(pendingRemoval?.name ?? "")”?",
-            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
-            presenting: pendingRemoval
-        ) { title in
-            Button("Remove", role: .destructive) { remove(title) }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("This also deletes its watch history. It can't be undone.")
         }
     }
 
@@ -128,6 +137,23 @@ struct LibraryView: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var kindAndSortPickers: some ToolbarContent {
+        ToolbarItem {
+            Picker("Kind", selection: $kindFilter) {
+                ForEach(KindFilter.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+        }
+        ToolbarItem {
+            Picker("Sort", selection: $sort) {
+                ForEach(LibrarySort.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.menu)
+            .help("Sort titles")
+        }
+    }
+
     @ViewBuilder
     private func contextMenu(for title: Title) -> some View {
         StatusPicker(title: title)
@@ -139,7 +165,6 @@ struct LibraryView: View {
     private func remove(_ title: Title) {
         modelContext.delete(title)
         try? modelContext.save()
-        // Undo steps for this title's events can no longer apply.
         undoManager?.removeAllActions(withTarget: watchLog)
         pendingRemoval = nil
     }
