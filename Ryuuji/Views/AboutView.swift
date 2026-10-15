@@ -2,6 +2,8 @@ import SwiftUI
 
 /// About / Settings screen with the TMDB attribution required by its terms.
 struct AboutView: View {
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+    
     private var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
@@ -32,6 +34,15 @@ struct AboutView: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 Link("themoviedb.org", destination: URL(string: "https://www.themoviedb.org")!)
+            }
+
+            Divider()
+            
+            VStack(spacing: 10) {
+                Text("Settings")
+                    .font(.headline)
+                Toggle("Show menu bar extra", isOn: $showMenuBarExtra)
+                    .help("Show Up Next in the menu bar for quick logging")
             }
 
             Divider()
