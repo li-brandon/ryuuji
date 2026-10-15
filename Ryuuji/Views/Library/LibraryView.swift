@@ -61,58 +61,49 @@ struct LibraryView: View {
 
     var body: some View {
         let today = AirDate.today()
-        if visible.isEmpty {
-            VStack(spacing: 0) {
-                statusBar
-                Divider()
-                ContentUnavailableView {
-                    Label(titles.isEmpty ? "Your Library Is Empty" : "No Matching Titles", systemImage: "books.vertical")
-                } description: {
-                    Text(titles.isEmpty ? "Press ⌘K to search TMDB and add titles." : "Try a different status or kind filter.")
+        Group {
+            if visible.isEmpty {
+                VStack(spacing: 0) {
+                    statusBar
+                    Divider()
+                    ContentUnavailableView {
+                        Label(titles.isEmpty ? "Your Library Is Empty" : "No Matching Titles", systemImage: "books.vertical")
+                    } description: {
+                        Text(titles.isEmpty ? "Press ⌘K to search TMDB and add titles." : "Try a different status or kind filter.")
+                    }
                 }
-            }
-            .navigationTitle("Library")
-            .toolbar { kindAndSortPickers }
-            .confirmationDialog(
-                "Remove "\(pendingRemoval?.name ?? "")"?",
-                isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
-                presenting: pendingRemoval
-            ) { title in
-                Button("Remove", role: .destructive) { remove(title) }
-                Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text("This also deletes its watch history. It can't be undone.")
-            }
-        } else {
-            List {
-                Section {
-                    ForEach(visible) { title in
-                        NavigationLink(value: TitleRoute(key: TitleKey(title))) {
-                            LibraryRow(title: title, today: today)
+            } else {
+                List {
+                    Section {
+                        ForEach(visible) { title in
+                            NavigationLink(value: TitleRoute(key: TitleKey(title))) {
+                                LibraryRow(title: title, today: today)
+                            }
+                            .contextMenu { contextMenu(for: title) }
                         }
-                        .contextMenu { contextMenu(for: title) }
+                    } header: {
+                        // Pinned section header keeps the filter bar above the rows (LIB-297).
+                        VStack(spacing: 0) {
+                            statusBar
+                            Divider()
+                        }
+                        .textCase(nil)
                     }
-                } header: {
-                    VStack(spacing: 0) {
-                        statusBar
-                        Divider()
-                    }
-                    .textCase(nil)
                 }
+                .listStyle(.plain)
             }
-            .listStyle(.plain)
-            .navigationTitle("Library")
-            .toolbar { kindAndSortPickers }
-            .confirmationDialog(
-                "Remove "\(pendingRemoval?.name ?? "")"?",
-                isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
-                presenting: pendingRemoval
-            ) { title in
-                Button("Remove", role: .destructive) { remove(title) }
-                Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text("This also deletes its watch history. It can't be undone.")
-            }
+        }
+        .navigationTitle("Library")
+        .toolbar { kindAndSortPickers }
+        .confirmationDialog(
+            "Remove “\(pendingRemoval?.name ?? "")”?",
+            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+            presenting: pendingRemoval
+        ) { title in
+            Button("Remove", role: .destructive) { remove(title) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("This also deletes its watch history. It can't be undone.")
         }
     }
 
@@ -165,6 +156,7 @@ struct LibraryView: View {
     private func remove(_ title: Title) {
         modelContext.delete(title)
         try? modelContext.save()
+        // Undo steps for this title's events can no longer apply.
         undoManager?.removeAllActions(withTarget: watchLog)
         pendingRemoval = nil
     }
