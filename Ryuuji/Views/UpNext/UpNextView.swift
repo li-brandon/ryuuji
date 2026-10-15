@@ -1,28 +1,38 @@
 import SwiftData
 import SwiftUI
 
-/// Home view: Watching shows with a next episode, plus one-click logging (up-next spec).
-struct UpNextView: View {
-    @Query(filter: #Predicate<Title> { $0.statusRaw == "watching" && $0.kindRaw == "show" })
-    private var watching: [Title]
+/// One Up Next item: a Watching show and its next episode. Shared by `UpNextView` and the
+/// menu bar extra so both lists use the same selection and order.
+struct UpNextEntry: Identifiable {
+    let title: Title
+    let next: EpisodeInfo
+    let remaining: Int
+    var id: PersistentIdentifier { title.persistentModelID }
 
-    private struct Entry: Identifiable {
-        let title: Title
-        let next: EpisodeInfo
-        let remaining: Int
-        var id: PersistentIdentifier { title.persistentModelID }
+    /// The `@Query` filter for Up Next candidates; narrow the results with `entries(from:)`.
+    static var candidates: Predicate<Title> {
+        #Predicate<Title> { $0.statusRaw == "watching" && $0.kindRaw == "show" }
     }
 
-    private var entries: [Entry] {
+    /// Candidates that have a next episode, most recently active first.
+    static func entries(from titles: [Title]) -> [UpNextEntry] {
         let today = AirDate.today()
-        return watching
-            .compactMap { title -> Entry? in
+        return titles
+            .compactMap { title -> UpNextEntry? in
                 let progress = title.progress(today: today)
                 guard let next = progress.next else { return nil }
-                return Entry(title: title, next: next, remaining: progress.remaining)
+                return UpNextEntry(title: title, next: next, remaining: progress.remaining)
             }
             .sorted { $0.title.lastActivity > $1.title.lastActivity }
     }
+}
+
+/// Home view: Watching shows with a next episode, plus one-click logging (up-next spec).
+struct UpNextView: View {
+    @Query(filter: UpNextEntry.candidates)
+    private var watching: [Title]
+
+    private var entries: [UpNextEntry] { UpNextEntry.entries(from: watching) }
 
     var body: some View {
         let entries = entries

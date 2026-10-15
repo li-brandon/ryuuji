@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         @Bindable var appState = appState
@@ -26,6 +27,7 @@ struct ContentView: View {
             }
         }
         .animation(.easeOut(duration: 0.12), value: appState.isQuickAddPresented)
+        .onChange(of: undoManager, initial: true) { appState.mainUndoManager = undoManager }
     }
 
     @ViewBuilder
