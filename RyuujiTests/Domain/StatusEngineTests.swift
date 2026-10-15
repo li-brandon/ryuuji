@@ -98,4 +98,20 @@ struct StatusEngineTests {
         #expect(show(.refresh, .dropped, watched: 1) == .dropped)
         #expect(show(.log, .dropped, watched: 1) == .watching)
     }
+
+    // MARK: Setting to Completed (LIB-299)
+
+    @Test func returningShowCompletedByBulkMarkBecomesCompleted() {
+        let ended = Fixtures.season(1, count: 3)
+        let events = ended.map { Fixtures.event($0) }
+        let progress = Progress.compute(episodes: ended, events: events, today: Fixtures.today)
+        #expect(StatusEngine.status(after: .log, current: .watching, kind: .show, progress: progress, showStatus: .ended) == .completed)
+    }
+
+    @Test func returningShowCompletedByBulkMarkBecomesCaughtUp() {
+        let returning = Fixtures.season(1, count: 3)
+        let events = returning.map { Fixtures.event($0) }
+        let progress = Progress.compute(episodes: returning, events: events, today: Fixtures.today)
+        #expect(StatusEngine.status(after: .log, current: .watching, kind: .show, progress: progress, showStatus: .returning) == .caughtUp)
+    }
 }
