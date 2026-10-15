@@ -45,11 +45,7 @@ final class TitleAdder {
         try context.save()
 
         if status == .completed {
-            if item.kind == .movie {
-                watchLog.log(nil, of: title, undoManager: nil)
-            } else {
-                watchLog.bulkMark(.all, of: title, undoManager: nil)
-            }
+            watchLog.complete(title, undoManager: nil)
         }
         return .added(title)
     }
