@@ -1,0 +1,116 @@
+name: macOS
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: Ryuuji.xcodeproj
+  SCHEME: Ryuuji
+  DESTINATION: platform=macOS
+  DERIVED_DATA: DerivedData
+  RESULTS_DIR: TestResults
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: |
+          echo "Installed Xcode versions:"
+          ls -d /Applications/Xcode*.app || true
+
+          # Pick the highest CFBundleShortVersionString; an Xcode 27 (incl. beta)
+          # sorts above Xcode 26.x, so this prefers 27 and falls back otherwise.
+          best_app=""
+          best_version=""
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app/Contents/Developer" ] || continue
+            [ -L "$app" ] && continue
+            version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null || echo "0")
+            echo "  $app -> $version"
+            if [ -z "$best_version" ] || [ "$(printf '%s\n%s\n' "$best_version" "$version" | sort -V | tail -n1)" = "$version" ]; then
+              best_app="$app"
+              best_version="$version"
+            fi
+          done
+
+          if [ -z "$best_app" ]; then
+            echo "::error::No Xcode installation found in /Applications"
+            exit 1
+          fi
+
+          echo "Selecting $best_app ($best_version)"
+          sudo xcode-select -s "$best_app/Contents/Developer"
+          xcodebuild -version
+
+          sdk_version=$(xcrun --sdk macosx --show-sdk-version)
+          echo "macOS SDK: $sdk_version"
+          if [ "${sdk_version%%.*}" -lt 27 ]; then
+            echo "::warning::Selected Xcode ships macOS SDK $sdk_version; MACOSX_DEPLOYMENT_TARGET 27.0 requires the macOS 27 SDK."
+          fi
+
+      - name: Cache Swift packages
+        if: hashFiles('**/Package.resolved') != ''
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Prepare secrets config
+        run: |
+          if [ ! -f Config/Secrets.xcconfig ]; then
+            cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig
+          fi
+
+      - name: Build for testing
+        run: |
+          mkdir -p "$RESULTS_DIR"
+          xcodebuild build-for-testing \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULTS_DIR/build.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=''
+
+      - name: Test
+        run: |
+          xcodebuild test-without-building \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULTS_DIR/test.xcresult" \
+            -only-testing:RyuujiTests \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=''
+
+      - name: Upload result bundles
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.RESULTS_DIR }}/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
