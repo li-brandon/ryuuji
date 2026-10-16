@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -19,6 +19,7 @@ env:
   DESTINATION: platform=macOS
   DERIVED_DATA: DerivedData
   RESULTS_DIR: TestResults
+  XCODE_VERSION: '27'
 
 jobs:
   build-and-test:
@@ -28,21 +29,38 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Select Xcode
-        env:
-          XCODE_APP: /Applications/Xcode_27.app
         run: |
+          XCODE_VERSION="${XCODE_VERSION:-27}"
           ls -d /Applications/Xcode*.app || true
-          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+
+          if [ -d "/Applications/Xcode_${XCODE_VERSION}.app" ]; then
+            XCODE_APP="/Applications/Xcode_${XCODE_VERSION}.app"
+          else
+            XCODE_APP="$(ls -d /Applications/Xcode_"${XCODE_VERSION}"*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          fi
+
+          if [ -n "$XCODE_APP" ]; then
+            echo "Selecting $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          else
+            echo "No /Applications/Xcode_${XCODE_VERSION}*.app found; keeping default $(xcode-select -p)"
+          fi
+
           xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk 'NR == 1 { split($2, v, "."); print v[1] }')"
+          if [ "$XCODE_MAJOR" != "$XCODE_VERSION" ]; then
+            echo "::error title=Wrong Xcode::Expected Xcode ${XCODE_VERSION}.x but got Xcode ${XCODE_MAJOR:-unknown} at $(xcode-select -p)"
+            exit 1
+          fi
           echo "macOS SDK: $(xcrun --sdk macosx --show-sdk-version)"
           sw_vers
 
       - name: Cache Swift packages
         if: hashFiles('**/Package.resolved') != ''
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.DERIVED_DATA }}/SourcePackages
           key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
@@ -83,7 +101,7 @@ jobs:
 
       - name: Upload result bundles
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: xcresult-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.RESULTS_DIR }}/*.xcresult
