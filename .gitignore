@@ -12,3 +12,8 @@ Config/Secrets.xcconfig
 
 # macOS
 .DS_Store
+
+# OpenSpec (local only)
+openspec/
+.claude/commands/opsx/
+.claude/skills/openspec-*/
