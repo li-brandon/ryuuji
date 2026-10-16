@@ -1,0 +1,91 @@
+name: macOS
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: Ryuuji.xcodeproj
+  SCHEME: Ryuuji
+  DESTINATION: platform=macOS
+  DERIVED_DATA: DerivedData
+  RESULTS_DIR: TestResults
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: xcode-27  # public-preview macOS 27 image; deployment target is macOS 27.0
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        env:
+          XCODE_APP: /Applications/Xcode_27.app
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+          echo "macOS SDK: $(xcrun --sdk macosx --show-sdk-version)"
+          sw_vers
+
+      - name: Cache Swift packages
+        if: hashFiles('**/Package.resolved') != ''
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA }}/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Prepare secrets config
+        run: |
+          if [ ! -f Config/Secrets.xcconfig ]; then
+            cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig
+          fi
+
+      - name: Build for testing
+        run: |
+          mkdir -p "$RESULTS_DIR"
+          xcodebuild build-for-testing \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULTS_DIR/build.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=''
+
+      - name: Test
+        run: |
+          xcodebuild test-without-building \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULTS_DIR/test.xcresult" \
+            -only-testing:RyuujiTests \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=''
+
+      - name: Upload result bundles
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.RESULTS_DIR }}/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
