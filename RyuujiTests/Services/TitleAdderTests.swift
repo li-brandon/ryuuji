@@ -36,7 +36,7 @@ struct TitleAdderTests {
         let episodes = Fixtures.season(0, count: 2) + regular + [Fixtures.episode(2, 3, airDate: Fixtures.future)]
         try client.update { $0.shows[10] = try TMDBBuilder.show(id: 10, status: "Ended", episodes: episodes) }
 
-        let title = try added(try await adder.add(searchItem(id: 10, kind: .show), status: .completed))
+        let title = try added(try await adder.add(searchItem(id: 10, kind: .show), status: .completed, undoManager: nil))
 
         let progress = title.progress(today: Fixtures.today)
         #expect(progress.watchedAiredRegularCount == regular.count)
@@ -52,7 +52,7 @@ struct TitleAdderTests {
         let movie = try FixtureFile.decode(TMDBMovie.self, "movie-372058")
         client.update { $0.movies[movie.id] = movie }
 
-        let title = try added(try await adder.add(searchItem(id: movie.id, kind: .movie), status: .completed))
+        let title = try added(try await adder.add(searchItem(id: movie.id, kind: .movie), status: .completed, undoManager: nil))
 
         #expect(title.eventList.count == 1)
         #expect(title.eventList.first?.isMovieEvent == true)
@@ -62,9 +62,25 @@ struct TitleAdderTests {
     @Test func showAddedAsPlanToWatchHasNoEvents() async throws {
         try client.update { $0.shows[11] = try TMDBBuilder.show(id: 11, episodes: Fixtures.season(1, count: 3)) }
 
-        let title = try added(try await adder.add(searchItem(id: 11, kind: .show), status: .planToWatch))
+        let title = try added(try await adder.add(searchItem(id: 11, kind: .show), status: .planToWatch, undoManager: nil))
 
         #expect(title.eventList.isEmpty)
         #expect(title.status == .planToWatch)
+    }
+
+    @Test func undoShowAddedAsCompletedRemovesBatchInOneStep() async throws {
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        let episodes = Fixtures.season(1, count: 4)
+        try client.update { $0.shows[12] = try TMDBBuilder.show(id: 12, status: "Ended", episodes: episodes) }
+
+        let title = try added(try await adder.add(searchItem(id: 12, kind: .show), status: .completed, undoManager: undo))
+        #expect(title.eventList.count == episodes.count)
+        #expect(undo.canUndo)
+
+        undo.undo()
+
+        #expect(title.eventList.isEmpty)
+        #expect(!undo.canUndo)
     }
 }

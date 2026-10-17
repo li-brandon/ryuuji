@@ -25,8 +25,9 @@ final class TitleAdder {
     }
 
     /// Fetches full metadata and inserts the title with `status`. Throws without inserting
-    /// anything if TMDB can't be reached.
-    func add(_ item: SearchItem, status: ListStatus) async throws -> Outcome {
+    /// anything if TMDB can't be reached. Adding as Completed registers the episode batch
+    /// with `undoManager`, so one undo removes it.
+    func add(_ item: SearchItem, status: ListStatus, undoManager: UndoManager?) async throws -> Outcome {
         if let existing = try TitleRepository.find(tmdbId: item.tmdbId, kind: item.kind, in: context) {
             return .existing(existing)
         }
@@ -45,7 +46,7 @@ final class TitleAdder {
         try context.save()
 
         if status == .completed {
-            watchLog.complete(title, undoManager: nil)
+            watchLog.complete(title, undoManager: undoManager)
         }
         return .added(title)
     }
