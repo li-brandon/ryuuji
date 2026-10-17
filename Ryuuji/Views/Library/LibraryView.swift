@@ -62,40 +62,40 @@ struct LibraryView: View {
 
     var body: some View {
         let today = AirDate.today()
-        VStack(spacing: 0) {
-            statusBar
-            Divider()
+        Group {
             if visible.isEmpty {
-                ContentUnavailableView {
-                    Label(titles.isEmpty ? "Your Library Is Empty" : "No Matching Titles", systemImage: "books.vertical")
-                } description: {
-                    Text(titles.isEmpty ? "Press ⌘K to search TMDB and add titles." : "Try a different status or kind filter.")
+                VStack(spacing: 0) {
+                    statusBar
+                    Divider()
+                    ContentUnavailableView {
+                        Label(titles.isEmpty ? "Your Library Is Empty" : "No Matching Titles", systemImage: "books.vertical")
+                    } description: {
+                        Text(titles.isEmpty ? "Press ⌘K to search TMDB and add titles." : "Try a different status or kind filter.")
+                    }
                 }
             } else {
-                List(visible) { title in
-                    NavigationLink(value: TitleRoute(key: TitleKey(title))) {
-                        LibraryRow(title: title, today: today)
+                List {
+                    Section {
+                        ForEach(visible) { title in
+                            NavigationLink(value: TitleRoute(key: TitleKey(title))) {
+                                LibraryRow(title: title, today: today)
+                            }
+                            .contextMenu { contextMenu(for: title) }
+                        }
+                    } header: {
+                        // Pinned section header keeps the filter bar above the rows (LIB-297).
+                        VStack(spacing: 0) {
+                            statusBar
+                            Divider()
+                        }
+                        .textCase(nil)
                     }
-                    .contextMenu { contextMenu(for: title) }
                 }
+                .listStyle(.plain)
             }
         }
         .navigationTitle("Library")
-        .toolbar {
-            ToolbarItem {
-                Picker("Kind", selection: $kindFilter) {
-                    ForEach(KindFilter.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-            }
-            ToolbarItem {
-                Picker("Sort", selection: $sort) {
-                    ForEach(LibrarySort.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.menu)
-                .help("Sort titles")
-            }
-        }
+        .toolbar { kindAndSortPickers }
         .confirmationDialog(
             "Remove “\(pendingRemoval?.name ?? "")”?",
             isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
@@ -126,6 +126,23 @@ struct LibraryView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var kindAndSortPickers: some ToolbarContent {
+        ToolbarItem {
+            Picker("Kind", selection: $kindFilter) {
+                ForEach(KindFilter.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+        }
+        ToolbarItem {
+            Picker("Sort", selection: $sort) {
+                ForEach(LibrarySort.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.menu)
+            .help("Sort titles")
         }
     }
 
