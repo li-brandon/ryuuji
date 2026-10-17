@@ -11,8 +11,8 @@ enum BulkScope: Hashable {
     case all
 }
 
-/// Owns every write that touches watch events (design D6). Each public operation
-/// recomputes status, saves, and registers exactly one undo step.
+/// Owns every write that touches watch events or list status (design D6). Each public
+/// operation updates status, saves, and registers exactly one undo step.
 @Observable
 final class WatchLogService {
     private let context: ModelContext
@@ -43,21 +43,47 @@ final class WatchLogService {
 
     /// Logs every aired, unwatched episode in `scope` with one shared timestamp and batch id.
     func bulkMark(_ scope: BulkScope, of title: Title, undoManager: UndoManager?) {
-        let progress = title.progress(today: today())
-        let candidates = title.allEpisodes.filter { episode in
-            switch scope {
-            case .season(let number): episode.season == number
-            case .all: !episode.isSpecial
-            }
-        }
-        let targets = candidates
-            .filter { $0.isAired(today: today()) && !progress.isWatched($0) }
-            .sorted { ($0.season, $0.number) < ($1.season, $1.number) }
+        let targets = unwatchedAired(scope, of: title)
         guard !targets.isEmpty else { return }
 
         let name = if case .season = scope { "Mark Season Watched" } else { "Mark All Watched" }
         perform(name, on: title, trigger: .log, undoManager: undoManager) {
             let batchId = UUID()
+            let timestamp = now()
+            let events = targets.map { makeEvent(for: $0, of: title, at: timestamp, batchId: batchId) }
+            return (events, [])
+        }
+    }
+
+    /// Changes the list status by hand. Choosing Completed also fills in missing watches
+    /// (see `complete`); either way it's one undo step that restores the previous status.
+    func setStatus(_ status: ListStatus, of title: Title, undoManager: UndoManager?) {
+        guard status != title.status else { return }
+        if status == .completed {
+            complete(title, undoManager: undoManager)
+            return
+        }
+        perform("Change Status", on: title, trigger: nil, undoManager: undoManager) {
+            title.status = status
+            return ([], [])
+        }
+    }
+
+    /// Sets `title` to Completed and logs what it's missing: every aired, unwatched regular
+    /// episode as one batch, or one watch of a movie that has none. Existing events are kept.
+    /// Status is then recomputed like any log, so a Returning show ends up Caught Up rather
+    /// than Completed; a show with no aired episodes keeps Completed.
+    func complete(_ title: Title, undoManager: UndoManager?) {
+        let progress = title.progress(today: today())
+        let targets: [EpisodeInfo?] = switch title.kind {
+        case .movie: progress.eventCount == 0 ? [nil] : []
+        case .show: unwatchedAired(.all, of: title).map { Optional($0) }
+        }
+        let trigger: StatusTrigger? = title.kind == .show && !progress.hasAiredRegular ? nil : .log
+
+        perform("Mark Completed", on: title, trigger: trigger, undoManager: undoManager) {
+            title.status = .completed
+            let batchId = title.kind == .show ? UUID() : nil
             let timestamp = now()
             let events = targets.map { makeEvent(for: $0, of: title, at: timestamp, batchId: batchId) }
             return (events, [])
@@ -101,13 +127,15 @@ final class WatchLogService {
     private func perform(
         _ actionName: String,
         on title: Title,
-        trigger: StatusTrigger,
+        trigger: StatusTrigger?,
         undoManager: UndoManager?,
         mutate: () -> (added: [WatchEvent], removed: [EventSnapshot])
     ) {
         let previousStatus = title.status
         let (added, removed) = mutate()
-        applyStatus(trigger, to: title)
+        if let trigger {
+            applyStatus(trigger, to: title)
+        }
         save()
 
         guard let undoManager else { return }
@@ -142,6 +170,20 @@ final class WatchLogService {
         }
         title.status = record.previousStatus
         save()
+    }
+
+    /// Aired episodes in `scope` with no events, in season/episode order.
+    private func unwatchedAired(_ scope: BulkScope, of title: Title) -> [EpisodeInfo] {
+        let progress = title.progress(today: today())
+        return title.allEpisodes
+            .filter { episode in
+                switch scope {
+                case .season(let number): episode.season == number
+                case .all: !episode.isSpecial
+                }
+            }
+            .filter { $0.isAired(today: today()) && !progress.isWatched($0) }
+            .sorted { ($0.season, $0.number) < ($1.season, $1.number) }
     }
 
     private func makeEvent(for episode: EpisodeInfo?, of title: Title, at date: Date, batchId: UUID?) -> WatchEvent {

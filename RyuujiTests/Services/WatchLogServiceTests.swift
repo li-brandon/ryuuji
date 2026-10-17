@@ -223,4 +223,107 @@ struct WatchLogServiceTests {
         undo.undo()
         #expect(try context.fetchCount(FetchDescriptor<Title>()) == 0)
     }
+
+    // MARK: Setting to Completed (LIB-299) — the StatusPicker path
+
+    @Test func setCompletedMarksAiredRegularEpisodesAsOneBatch() throws {
+        let specials = Fixtures.season(0, count: 2)
+        let aired = Fixtures.season(1, count: 10)
+        let unaired = [Fixtures.episode(1, 11, airDate: Fixtures.future), Fixtures.episode(1, 12, airDate: Fixtures.future)]
+        let show = makeShow(specials + aired + unaired, status: .watching, showStatus: .ended)
+
+        service.setStatus(.completed, of: show, undoManager: nil)
+
+        let events = show.eventList
+        #expect(events.count == 10)
+        #expect(events.allSatisfy { $0.season == 1 && ($0.episode ?? 0) <= 10 })
+        #expect(Set(events.map(\.batchId)).count == 1)
+        #expect(events.first?.batchId != nil)
+        #expect(show.status == .completed)
+    }
+
+    @Test func setCompletedFillsOnlyMissingEpisodes() throws {
+        let episodes = Fixtures.season(1, count: 5)
+        let show = makeShow(episodes, status: .watching, showStatus: .ended)
+        service.log(episodes[0], of: show, undoManager: nil)
+        service.log(episodes[1], of: show, undoManager: nil)
+
+        service.setStatus(.completed, of: show, undoManager: nil)
+
+        #expect(try eventCount() == 5)
+        #expect(Set(show.eventList.compactMap(\.episode)) == [1, 2, 3, 4, 5])
+        #expect(episodes.allSatisfy { show.progress(today: Fixtures.today).rewatchCount(of: $0) == 0 })
+    }
+
+    @Test func setCompletedOnReturningShowBecomesCaughtUp() throws {
+        // Completed is reserved for finished shows; a Returning show the user has caught up on is Caught Up.
+        let show = makeShow(Fixtures.season(1, count: 3), status: .watching, showStatus: .returning)
+
+        service.setStatus(.completed, of: show, undoManager: nil)
+
+        #expect(try eventCount() == 3)
+        #expect(show.status == .caughtUp)
+    }
+
+    @Test func setCompletedOnShowWithNothingAiredStaysCompleted() throws {
+        let show = makeShow(Fixtures.season(1, count: 3, airDate: Fixtures.future), status: .planToWatch)
+
+        service.setStatus(.completed, of: show, undoManager: nil)
+
+        #expect(try eventCount() == 0)
+        #expect(show.status == .completed)
+    }
+
+    @Test func undoSetCompletedRestoresEventsAndStatus() throws {
+        let undo = makeUndoManager()
+        let episodes = Fixtures.season(1, count: 5)
+        let show = makeShow(episodes, status: .planToWatch, showStatus: .ended)
+        service.log(episodes[0], of: show, undoManager: nil)
+        #expect(show.status == .watching)
+
+        service.setStatus(.completed, of: show, undoManager: undo)
+        #expect(try eventCount() == 5)
+        #expect(show.status == .completed)
+
+        undo.undo()
+
+        #expect(try eventCount() == 1)
+        #expect(show.progress(today: Fixtures.today).isWatched(episodes[0]))
+        #expect(show.status == .watching)
+        #expect(!undo.canUndo)
+    }
+
+    @Test func undoOtherStatusChangeRestoresStatus() throws {
+        let undo = makeUndoManager()
+        let show = makeShow(Fixtures.season(1, count: 3), status: .watching)
+
+        service.setStatus(.onHold, of: show, undoManager: undo)
+        #expect(show.status == .onHold)
+        #expect(try eventCount() == 0)
+
+        undo.undo()
+
+        #expect(show.status == .watching)
+    }
+
+    @Test func setCompletedOnUnwatchedMovieLogsOneEvent() throws {
+        let movie = makeMovie()
+
+        service.setStatus(.completed, of: movie, undoManager: nil)
+
+        #expect(movie.eventList.count == 1)
+        #expect(movie.eventList.first?.isMovieEvent == true)
+        #expect(movie.status == .completed)
+    }
+
+    @Test func setCompletedOnWatchedMovieAddsNoEvent() throws {
+        let movie = makeMovie()
+        service.log(nil, of: movie, undoManager: nil)
+        service.setStatus(.dropped, of: movie, undoManager: nil)
+
+        service.setStatus(.completed, of: movie, undoManager: nil)
+
+        #expect(movie.eventList.count == 1)
+        #expect(movie.status == .completed)
+    }
 }

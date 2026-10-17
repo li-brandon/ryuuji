@@ -7,6 +7,7 @@ import os // TEMP
 struct QuickAddPanel: View {
     @Environment(AppState.self) private var appState
     @Environment(AppServices.self) private var services
+    @Environment(\.undoManager) private var undoManager
     @Query private var titles: [Title]
 
     @State private var query = ""
@@ -209,7 +210,7 @@ struct QuickAddPanel: View {
         Task {
             defer { adding.remove(item.id) }
             do {
-                switch try await services.adder.add(item, status: status) {
+                switch try await services.adder.add(item, status: status, undoManager: undoManager) {
                 case .added:
                     // Stay open so several titles can be added in a row; the row now shows "In list".
                     break

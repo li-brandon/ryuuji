@@ -81,16 +81,26 @@ extension Title {
     }
 }
 
-/// The status picker used in the detail view and context menus.
+/// The status picker used in the detail view and context menus. Changes go through
+/// `WatchLogService` so they're undoable and Completed fills in missing watches.
 struct StatusPicker: View {
-    @Bindable var title: Title
+    let title: Title
+    @Environment(WatchLogService.self) private var watchLog
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
-        Picker("Status", selection: $title.status) {
+        Picker("Status", selection: selection) {
             ForEach(ListStatus.allCases) { status in
                 Label(status.label, systemImage: status.systemImage).tag(status)
             }
         }
+    }
+
+    private var selection: Binding<ListStatus> {
+        Binding(
+            get: { title.status },
+            set: { watchLog.setStatus($0, of: title, undoManager: undoManager) }
+        )
     }
 }
 
