@@ -42,6 +42,13 @@ final class AppState {
     /// The main window's undo manager, so logs from the menu bar extra undo with ⌘Z in the
     /// main window. Nil while the main window is closed.
     @ObservationIgnored weak var mainUndoManager: UndoManager?
+    /// App-owned undo stack for menu bar logs made while the main window is closed, so they
+    /// stay undoable from the menu bar extra.
+    @ObservationIgnored let menuBarUndoManager = UndoManager()
+
+    /// Where menu bar logs register undo: the main window's stack when it is open, otherwise
+    /// the app-owned fallback.
+    var menuBarLogUndoManager: UndoManager { mainUndoManager ?? menuBarUndoManager }
 
     func open(_ title: Title) {
         path = [TitleRoute(key: TitleKey(title))]
