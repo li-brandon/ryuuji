@@ -5,6 +5,7 @@ import SwiftUI
 struct RyuujiApp: App {
     @State private var services: AppServices
     @State private var appState: AppState
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
 
     init() {
         AppConfig.logTokenPresence()
@@ -48,6 +49,14 @@ struct RyuujiApp: App {
         Settings {
             AboutView()
         }
+
+        MenuBarExtra("Ryuuji", systemImage: "play.square.stack", isInserted: $showMenuBarExtra) {
+            MenuBarExtraContent()
+                .environment(appState)
+                .environment(services.watchLog)
+        }
+        .menuBarExtraStyle(.window)
+        .modelContainer(services.container)
     }
 }
 

@@ -31,6 +31,7 @@ enum LibrarySort: String, CaseIterable, Identifiable {
 struct LibraryView: View {
     @Query private var titles: [Title]
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
     @Environment(WatchLogService.self) private var watchLog
     @Environment(\.undoManager) private var undoManager
 
@@ -141,6 +142,7 @@ struct LibraryView: View {
         try? modelContext.save()
         // Undo steps for this title's events can no longer apply.
         undoManager?.removeAllActions(withTarget: watchLog)
+        appState.menuBarUndoManager.removeAllActions(withTarget: watchLog)
         pendingRemoval = nil
     }
 }
